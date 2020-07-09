@@ -7,6 +7,10 @@ class BranchPredictor {
 
 };
 
+class ALU {
+
+}
+
 class TwoBitSaturatingCounter {
 private:
     uint8_t curState;
@@ -16,7 +20,7 @@ public:
     }
     void set(bool PredictResult) {
         PredictResult ? ++curState : --curState;
-        curState = curState ^ (curState & 0b100) ^ (curState & 0b100 >> 1) ^ (curState & 0b100 >> 2)
+        curState = curState ^ (curState & 0b100) ^ (curState & 0b100 >> 1) ^ (curState & 0b100 >> 2);
     }
 };
 
@@ -30,9 +34,7 @@ private:
     struct EX_MEM_t { uint32_t IR; uint32_t ALUOutput; uint32_t B; bool cond; } EX_MEM;
     struct MEM_WB_t { uint32_t IR; uint32_t ALUOutput; uint32_t LMD; } MEM_WB;
     
-    enum InstructionOperation {
-        BUBBLE, LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
-    };
+    
     enum InstructionOpcode {
         OC_BUBBLE  = 0b0000000,
         OC_LUI     = 0b0110111,
