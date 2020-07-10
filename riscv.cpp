@@ -3,10 +3,10 @@
 namespace sjtu{
 
 enum InstructionOperation {
-    BUBBLE, LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+    NOP, LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
 };
 enum InstructionOpcode {
-    OC_BUBBLE  = 0b0000000,
+    OC_NOP  = 0b0000000,
     OC_LUI     = 0b0110111,
     OC_AUIPC   = 0b0010111,
     OC_JAL     = 0b1101111,
@@ -211,7 +211,7 @@ public:
         uint funct7 = getFunct7();
 
         switch (opcode) {
-            default: return BUBBLE;
+            default: return NOP;
             case 0b0110111: return LUI;
             case 0b0010111: return AUIPC;
             case 0b1101111: return JAL;
@@ -224,7 +224,7 @@ public:
                     case 0b101: return BGE; //BGE
                     case 0b110: return BLTU; //BLTU
                     case 0b111: return BGEU; //BGEU
-                    default: return BUBBLE;
+                    default: return NOP;
                 }
                 break;
             case 0b0000011:
@@ -234,14 +234,14 @@ public:
                     case 0b010: return LW;  //LW
                     case 0b100: return LBU; //LBU
                     case 0b101: return LHU; //LHU
-                    default: return BUBBLE;
+                    default: return NOP;
                 }
             case 0b0100011:
                 switch (funct3) {
                     case 0b000: return SB; //SB
                     case 0b001: return SH; //SH
                     case 0b010: return SW; //SW
-                    default: return BUBBLE;
+                    default: return NOP;
                 }
             case 0b0010011:
                 if (funct3 != 0b001 and funct3 != 0b101) {
@@ -252,7 +252,7 @@ public:
                         case 0b100: return XORI;    //XORI
                         case 0b110: return ORI;     //ORI
                         case 0b111: return ANDI;    //ANDI
-                        default: return BUBBLE;
+                        default: return NOP;
                     }
                 } else {
                     if (funct3 == 0b001)
@@ -283,7 +283,7 @@ public:
                         break; 
                     case 0b110: return OR;      //OR
                     case 0b111: return AND;     //AND
-                    default: return BUBBLE;
+                    default: return NOP;
                 }
         }
     }  
@@ -302,43 +302,88 @@ public:
 };
 
 class Forwarding {
+    enum { FD_SIZE = 3 };
 private:
-    uint32_t ex_rd;
-    uint32_t ex_output;
-    uint32_t mem_rd;
-    uint32_t mem_output;
+    int32_t rd[FD_SIZE];
+    uint32_t output[FD_SIZE];
+    uint32_t clk[FD_SIZE];
+    uint32_t rank[FD_SIZE];
+    uint32_t max_rank;
 public:
     Forwarding() {
         clear();
     }
     void clear() {
-        update_ex();
-        update_mem();
+        for (int i = 0; i < FD_SIZE; i++)
+            rd[i] = 0, rank[i] = 0;
+        max_rank = 0;
     }
-    void update_ex(uint32_t rd = 0, uint32_t output = 0) {
-        ex_rd =  rd;
-        ex_output = output;
+    bool set_change_rd(uint32_t Rd, uint32_t Clk) {
+        for (int i = 0; i < FD_SIZE; i++)
+            if (rd[i] == 0) {
+                rd[i] = -(int)Rd;
+                clk[i] = Clk;
+                rank[i] = ++max_rank;
+                return true;
+            }
+        return false;
     }
-    void update_mem(uint32_t rd = 0, uint32_t output = 0) {
-        mem_rd = rd;
-        mem_output = output;
+    bool set_change_output(uint32_t ALUOutput, uint32_t Clk) {
+        for (int i = 0; i < FD_SIZE; i++)
+            if (clk[i] == Clk) {
+                rd[i] = -rd[i];
+                output[i] = ALUOutput;
+                return true;
+            }
+        return false;
+    }
+    bool set_complete(uint32_t Clk) {
+        for (int i = 0; i < FD_SIZE; i++)
+            if (clk[i] == Clk) {
+                for (int j = 0; j < FD_SIZE; j++)
+                    if (rank[j] > rank[i])
+                        rank[j]--;
+                rank[i] = 0;
+                max_rank--;
+                rd[i] = 0;
+                return true;
+            }
+        return false;
     }
     bool check_changed(const uint32_t &pointer) {
-        if (pointer != 0 and (pointer == ex_rd or pointer == mem_rd))
-            return true;
+        if (pointer == 0) 
+            return false;
+        for (int i = 0; i < FD_SIZE; i++)
+            if (pointer == rd[i] or pointer == -rd[i])
+                return true;
+        return false;
+    }
+    bool check_output(const uint32_t &pointer) {
+        uint32_t rnk = 0, k = 0;
+        for (int i = 0; i < FD_SIZE; i++)
+            if (pointer == rd[i] or pointer == -rd[i]) {
+                if (rank[i] > rnk) 
+                    rnk = rank[i], k = i;
+            }
+            
+        
+            if (rd[k] == pointer) 
+                return true;
+            else
+                return false;
+        
+        
     }
     uint32_t get(const uint32_t &pointer) {
-        if (pointer == ex_rd)
-            return ex_output;
-        else
-            return mem_output;
+        
     }
 };
 struct IF_ID { 
     uint32_t IR; 
     uint32_t NPC; 
     uint32_t PC; 
-    void clear() { IR = 0; }
+    uint32_t CLK;
+    void clear() { IR = NOP; }
 };
 struct ID_EX { 
     uint32_t IR; 
@@ -346,20 +391,23 @@ struct ID_EX {
     uint32_t PC; 
     uint32_t A; 
     uint32_t B;
-    void clear() { IR = 0; }
+    uint32_t CLK;
+    void clear() { IR = NOP; }
 };
 struct EX_MEM { 
     uint32_t IR; 
     uint32_t ALUOutput; 
     uint32_t B; 
     bool cond; 
-    void clear() { IR = 0; }
+    uint32_t CLK;
+    void clear() { IR = NOP; }
 };
 struct MEM_WB { 
     uint32_t IR; 
     uint32_t ALUOutput; 
-    uint32_t LMD; 
-    void clear() { IR = 0; }
+    uint32_t LMD;
+    uint32_t CLK; 
+    void clear() { IR = NOP; }
 };
 
 class Hazard {
@@ -384,8 +432,12 @@ public:
     void start() {
         set_clk_cyc(1);
     }
+    void end() {
+        set_clk_cyc(0);
+    }
     void run() {
-        if (remain_clk_cyc > 0)
+        if (remain_clk_cyc == 1) end();
+        else if (remain_clk_cyc > 0)
             remain_clk_cyc--;
     }
     bool is_finished() {
@@ -400,6 +452,9 @@ public:
     void solve_hazard() {
         hazard.set(false);
     }
+    void restart() {
+        start();   
+    }
 };
 
 class IFU : public StageUnit {
@@ -409,10 +464,15 @@ private:
     RandomAccessMemory &RAM;
     BranchPredictor &BP;
     AdderUnit AU;
+    uint32_t clk;
 public:
     IFU(uint32_t &pc, IF_ID &if_id, RandomAccessMemory &RAM, BranchPredictor &BP) : pc(pc), if_id(if_id), RAM(RAM), BP(BP) {}
-    void start() {
+    void start(uint32_t clk) {
         StageUnit::start();
+        this->clk = clk;
+    }
+    void end() {
+        StageUnit::end();
         if_id.PC = pc;
         if_id.IR = 
             RAM.read(pc) | 
@@ -437,6 +497,11 @@ public:
         }
         pc = AU.getOutput();
         if_id.NPC = pc;
+        if_id.CLK = clk;
+    }
+    void restart() {
+        if_id.clear();
+        StageUnit::start();
     }
 };
 
@@ -456,20 +521,31 @@ public:
     pc(pc), if_id(if_id), id_ex(id_ex), Regs(Regs), BP(BP), FD(FD) {}
     void start() {
         StageUnit::start();
-        if (if_id.IR == BUBBLE) return;
+    }
+    void end() {
+        StageUnit::end();
         id_ex.IR = if_id.IR;
+        if (if_id.IR == NOP) return;
 
         InstructionDecoder IR(if_id.IR);
         if (IR.checkRs1()) {
-            if (FD.check_changed(IR.getRs1()))
-                id_ex.A = FD.get(IR.getRs1());
+            if (FD.check_changed(IR.getRs1())) {
+                if (FD.check_output(IR.getRs1()))
+                    id_ex.A = FD.get(IR.getRs1());
+                else
+                    this->throw_hazard();
+            }
             else 
                 id_ex.A = Regs.read(IR.getRs1());
         }
             
         if (IR.checkRs2()) {
-            if (FD.check_changed(IR.getRs2()))
-                id_ex.B = FD.get(IR.getRs2());
+            if (FD.check_changed(IR.getRs2())) {
+                if (FD.check_output(IR.getRs2()))
+                    id_ex.A = FD.get(IR.getRs2());
+                else
+                    this->throw_hazard();
+            }
             else 
                 id_ex.B = Regs.read(IR.getRs2());
         } else if (IR.checkShamt())
@@ -482,8 +558,12 @@ public:
             AU.setInput2(IR.getImm());
             pc = AU.getOutput() & ~1u;
         }
-
+        id_ex.CLK = if_id.CLK;
         if_id.clear();
+    }
+    void restart() {
+        id_ex.clear();
+        start();
     }
 };
 
@@ -505,10 +585,17 @@ public:
     ) : pc(pc), id_ex(id_ex), ex_mem(ex_mem), BP(BP), FD(FD) {}
     void start() {
         StageUnit::start();
-        if (id_ex.IR == BUBBLE) return;
+    }
+    void end() {
+        StageUnit::end();
         ex_mem.IR = id_ex.IR;
+        if (id_ex.IR == NOP) return;
+        
         InstructionDecoder IR(id_ex.IR);
         
+        if (IR.checkRd())
+            FD.set_change_rd(IR.getRd(), id_ex.CLK);
+
         switch (IR.getOpcode())
         {
         case OC_OP_IMM: case OC_OP: 
@@ -587,10 +674,13 @@ public:
             break;
         }
         if (IR.checkRd())
-            FD.update_ex(IR.getRd(), ex_mem.ALUOutput);
-        else 
-            FD.update_ex();
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
+        ex_mem.CLK = id_ex.CLK;
         id_ex.clear();
+    }
+    void restart() {
+        ex_mem.clear();
+        start();
     }
 };
 
@@ -609,8 +699,18 @@ public:
     ) : ex_mem(ex_mem), mem_wb(mem_wb), RAM(RAM), FD(FD) {}
     void start() {
         StageUnit::start();
-        if (ex_mem.IR == BUBBLE) return;
+        switch (InstructionDecoder(ex_mem.IR).getOpcode())
+        {
+        case OC_LOAD: case OC_STORE:
+            set_clk_cyc(3); // LOAD STORE 指令需要运行三个时钟周期
+            break;
+        }
+    }
+    void end() {
+        StageUnit::end();
         mem_wb.IR = ex_mem.IR;
+        if (ex_mem.IR == NOP) return;
+        
         InstructionDecoder IR(ex_mem.IR);
         switch (IR.getOpcode())
         {
@@ -633,6 +733,7 @@ public:
                 case LHU: mem_wb.LMD = RAM.read(ex_mem.ALUOutput) | RAM.read(ex_mem.ALUOutput + 1) << 8;
                     break;
             }
+            FD.set_change_output(mem_wb.LMD, ex_mem.CLK);
             break;
         case OC_STORE:
             set_clk_cyc(3); // STORE 指令需要运行三个时钟周期
@@ -651,12 +752,9 @@ public:
         }
         ex_mem.clear();
     }
-    void run() {
-        StageUnit::run();
-        if (IR.checkRd())
-            FD.update_mem(IR.getRd(), mem_wb.ALUOutput);
-        else 
-            FD.update_mem();
+    void restart() {
+        mem_wb.clear();
+        start();
     }
 };
 
@@ -664,46 +762,46 @@ class WBU : public StageUnit {
 private:
     MEM_WB &mem_wb;
     Registers &Regs;
+    Forwarding &FD;
 public:
-    WBU(MEM_WB &mem_wb, Registers &Regs) : mem_wb(mem_wb), Regs(Regs) {}
+    WBU(
+        MEM_WB &mem_wb, 
+        Registers &Regs,
+        Forwarding &FD
+    ) : mem_wb(mem_wb), Regs(Regs), FD(FD) {}
     void start() {
         StageUnit::start();
-        if (mem_wb.IR == BUBBLE) return;
+    }
+    void end() {
+        StageUnit::end();
+        if (mem_wb.IR == NOP) return;
         InstructionDecoder IR(mem_wb.IR);
         switch (IR.getOpcode())
         {
         case OC_OP: case OC_OP_IMM: case OC_LUI: case OC_AUIPC: 
             Regs.write(IR.getRd(), mem_wb.ALUOutput);
+            FD.set_complete(mem_wb.CLK);
             break;
         case OC_JAL: case OC_JALR: case OC_BRANCH:
             break;
         case OC_LOAD:
             Regs.write(IR.getRd(), mem_wb.LMD);
+            FD.set_complete(mem_wb.CLK);
             break;
         case OC_STORE:
             break;
         }
         mem_wb.clear();
     }
+    void restart() {
+        start();
+    }
 };
-
-
-class Instruction {
-
-};
-
-class PipeLine {
-    
-};
-
-
 
 class CPU {
 private:
     RandomAccessMemory &RAM;
     Registers RegisterFile;
-    uint32_t pc;
-    uint64_t clk;
     IF_ID if_id;
     ID_EX id_ex;
     EX_MEM ex_mem;
@@ -720,7 +818,7 @@ private:
         return EOF;
     }
 public:
-    CPU(RandomAccessMemory RAM) : RAM(RAM) {}
+    CPU(RandomAccessMemory &RAM) : RAM(RAM) {}
     void load_program() {
         char c = getchar();
         uint now_ptr = 0;
@@ -739,110 +837,77 @@ public:
             }
             c = getchar();
         }
-    }/*
-    void run() {
-        pc = 0;
-        clk = 0;
-        IFU IF(pc, if_id, RAM, BP);
-        IDU ID(pc, if_id, id_ex, RegisterFile, BP);
-        EXU EX(id_ex, ex_mem, BP);
-        MEMU MEM(ex_mem, mem_wb, RAM);
-        WBU WB(mem_wb, RegisterFile);
-        while (true) {
-            IF.start();
-            while (!IF.is_finished())
-                IF.clk();
-
-            ID.start();
-            while (!ID.is_finished())
-                ID.clk();
-            
-            EX.start();
-            while (!EX.is_finished())
-                EX.clk();
-
-            MEM.start();
-            while (!MEM.is_finished())
-                MEM.clk();
-
-            WB.start();
-            while (!WB.is_finished())
-                WB.clk();                
-        }
-
-    }*/
+    }
+    void pipline_flush() {
+        if_id.clear();
+        id_ex.clear();
+    }
     void run_with_pipeline() {
-        pc = 0;
-        clk = 0;
-        IFU IF(pc, if_id, RAM, BP);
-        IDU ID(pc, if_id, id_ex, RegisterFile, BP, FD);
-        EXU EX(pc, id_ex, ex_mem, BP, FD);
-        MEMU MEM(ex_mem, mem_wb, RAM, FD);
-        WBU WB(mem_wb, RegisterFile);
-        while (true) {
+        uint32_t pc = 0;
+        uint32_t clk = 0;
+        bool rst = false;
+        if_id.clear();
+        id_ex.clear();
+        ex_mem.clear();
+        mem_wb.clear();
+        IFU IF(pc, if_id,           RAM,            BP      );
+        IDU ID(pc, if_id, id_ex,    RegisterFile,   BP, FD  );
+        EXU EX(pc, id_ex, ex_mem,                   BP, FD  );
+        MEMU MEM(ex_mem, mem_wb,    RAM,                FD  );
+        WBU WB(mem_wb,              RegisterFile,       FD  );
+        while (!rst or mem_wb.IR != NOP) {
             clk++;
-            IF.run();
-            ID.run();
-            EX.run();
-            MEM.run();
-            WB.run();
-
+            WB.run();            
             if (!WB.is_finished()) continue;
-            else {
-                WB.start();
-                if (WB.catch_hazard()) {
-                    WB.solve_hazard();
-                    continue;
-                }
-            }
-            
+            else if (WB.catch_hazard()) {
+                WB.solve_hazard(); 
+                //WB.restart();
+                continue;
+            } else WB.start();
+
+            MEM.run();            
             if (!MEM.is_finished()) continue;
-            else {
-                MEM.start();
-                if (MEM.catch_hazard()) {
-                    MEM.solve_hazard();
-                    continue;
-                }
-            }
+            else if (MEM.catch_hazard()) {
+                MEM.solve_hazard(); 
+                //MEM.restart();
+                continue;
+            } else MEM.start();
 
+            EX.run();            
             if (!EX.is_finished()) continue;
-            else {
-                EX.start();
-                if (EX.catch_hazard()) {
-                    EX.solve_hazard();
-                    continue;
-                }
-            }
+            else if (EX.catch_hazard()) {
+                EX.solve_hazard(); 
+                //EX.restart();
+                pipline_flush();
+                continue;
+            } else EX.start();
 
+            ID.run(); 
+            if (id_ex.IR == 0x0ff00513) rst = true;
             if (!ID.is_finished()) continue;
-            else {
-                ID.start();
-                if (ID.catch_hazard()) {
-                    ID.solve_hazard();
-                    continue;
-                }
-            }
+            else if (ID.catch_hazard()) {
+                ID.solve_hazard(); 
+                ID.restart();
+                continue;
+            } else ID.start();
 
+            IF.run();    
+            if (rst) if_id.IR = NOP;
             if (!IF.is_finished()) continue;
-            else {
-                IF.start();
-                if (IF.catch_hazard()) {
-                    IF.solve_hazard();
-                    continue;
-                }
-            }
+            else if (IF.catch_hazard()) {
+                IF.solve_hazard(); 
+                //IF.restart();
+                continue;
+            } else IF.start(clk);
         }
     }
-};
-
-class Stall {
-
 };
 
 }
 
 int main() {
     sjtu::RandomAccessMemory Mem;
-1w  wwe1    Wu.load_program();
+    sjtu::CPU cpu(Mem);
+    cpu.load_program();
     cpu.run_with_pipeline();
 }
