@@ -1,4 +1,6 @@
 #include <iostream>
+#include <iomanip>
+//#include <map>
 
 namespace sjtu{
 
@@ -20,14 +22,28 @@ enum InstructionOpcode {
 
 class TwoBitSaturatingCounter {
 private:
-    uint8_t curState;
+    int8_t curState;
 public:
+    TwoBitSaturatingCounter() {
+        curState = 0;
+    }
     bool get() {
-        return curState >> 1 & 1;
+        return curState >> 1 & 1 ?  true : false;
     }
     void set(bool PredictResult) {
         PredictResult ? ++curState : --curState;
-        curState = curState ^ (curState & 0b100) ^ (curState & 0b100 >> 1) ^ (curState & 0b100 >> 2);
+        if (curState < 0) curState = 0;
+        if (curState > 3) curState = 3;
+    }
+    void print() {
+        if (curState & 3 == 3)
+            std::cerr << "TwoBitSaturatingCounter" << " : " << "stronglyToken" << std::endl;
+        if (curState & 3 == 2)
+            std::cerr << "TwoBitSaturatingCounter" << " : " << "weaklyToken" << std::endl;
+        if (curState & 3 == 1)
+            std::cerr << "TwoBitSaturatingCounter" << " : " << "weaklyNotToken" << std::endl;
+        if (curState & 3 == 0)
+            std::cerr << "TwoBitSaturatingCounter" << " : " << "stronglyNotToken" << std::endl;
     }
 };
 
@@ -35,13 +51,39 @@ typedef TwoBitSaturatingCounter BranchPredictor;
 
 class ArithmeticLogicUnit {
 private:
-    uint input1, input2; 
+    uint32_t input1, input2; 
 public:
     enum OpType {
-        OT_NOP, OT_ADD, OT_SUB, OT_SLL, OT_SLT, OT_SLTU, OT_XOR, OT_SRA, OT_SRL, OT_OR, OT_AND
+        OT_NOP, OT_ADD, OT_SUB, OT_SLL, OT_SLT, OT_SLTU, OT_XOR, OT_SRA, OT_SRL, OT_OR, OT_AND, OT_EQ
     } opType;
+    void print() {
+        using namespace std;
+        std::cerr << "ArithmeticLogicUnit" << " : ";
+        std::cerr << input1;
+        cerr << ' ';
+        switch (opType) {
+            case OT_NOP: cerr << "NOP"; break;
+            case OT_ADD: cerr << "ADD"; break;
+            case OT_SUB: cerr << "SUB"; break;
+            case OT_SLL: cerr << "SLL"; break;
+            case OT_SLT: cerr << "SLT"; break;
+            case OT_SLTU: cerr << "SLTU"; break;
+            case OT_XOR: cerr << "XOR"; break;
+            case OT_SRA: cerr << "SRA"; break;
+            case OT_SRL: cerr << "SRL"; break;
+            case OT_OR: cerr << "OR"; break;
+            case OT_AND: cerr << "AND"; break;
+            case OT_EQ: cerr << "EQ"; break;
+        }
+        cerr << ' ';
+        std::cerr << input2 << std::endl;
+    }
+    void setImm() {
+        if (opType == OT_SUB)
+            opType = OT_ADD;
+    }
     void setOpType(OpType type) { opType = type; }
-    void setOpType(const uint &funct3, const uint &funct7) {
+    void setOpType(const uint32_t &funct3, const uint32_t &funct7) {
         switch (funct3) {
         case 0b000: // ADD SUB
             if (funct7 == 0)
@@ -59,9 +101,9 @@ public:
             this->opType = OT_XOR; break;
         case 0b101: // SRA SRL
             if (funct7 == 0)
-                this->opType = OT_SRA; 
-            else
                 this->opType = OT_SRL; 
+            else
+                this->opType = OT_SRA; 
             break;
         case 0b110: // OR
             this->opType = OT_OR; break;
@@ -71,13 +113,13 @@ public:
             this->opType = OT_NOP;  break;
         }
     }
-    void setInput1(const uint &value) {
+    void setInput1(const uint32_t &value) {
         input1 = value;
     }
-    void setInput2(const uint &value) {
+    void setInput2(const uint32_t &value) {
         input2 = value;
     }
-    uint getOutput() {
+    uint32_t getOutput() {
         switch (opType) {
             case OT_NOP: return 0u; 
             case OT_ADD: return input1 + input2;
@@ -90,6 +132,7 @@ public:
             case OT_SRL: return input1 >> input2;
             case OT_OR: return input1 | input2;
             case OT_AND: return input1 & input2;
+            case OT_EQ: return input1 == input2;
         }
         return 0u;
     }
@@ -97,28 +140,64 @@ public:
 
 class AdderUnit {
 private:
-    uint input1, input2;
+    uint32_t input1, input2;
 public:
-    void setInput1(uint value) { input1 = value; }
-    void setInput2(uint value) { input2 = value; }
-    uint getOutput() { return input1 + input2; }
+    void setInput1(uint32_t value) { input1 = value; }
+    void setInput2(uint32_t value) { input2 = value; }
+    uint32_t getOutput() { return input1 + input2; }
+    void print() {
+        std::cerr << "AdderUnit : " << input1 << " + " << input2 << std::endl;
+    }
 };
 
 class RandomAccessMemory {
 private:
     uint8_t * Mem;
     uint32_t size;
+    //std::map<uint32_t, bool>R, W;
 public:
     RandomAccessMemory(uint32_t size = 1 << 20) : size(size) {
         Mem = new uint8_t[size];
+        //R.clear();
+        //W.clear();
     }
     uint8_t read(const uint32_t &pointer) { 
+        //R[pointer] = true;
         return Mem[pointer]; 
     }
     void write(const uint32_t &pointer, uint8_t value) { 
+        //W[pointer] = true;
         Mem[pointer] = value; 
     }
     ~RandomAccessMemory() { delete [] Mem; }
+    /*
+    void print(uint32_t begin, uint32_t end) {
+        using namespace std;
+        cerr << "RandomAccessMemory : " << endl << setw(4) << setfill(' ') << hex << (uint16_t)begin << '\t';
+        for (int i = begin; i != end; i++) {
+            if (R[i] && W[i]) cerr << '{';
+            else if (R[i]) cerr << '(';
+            else if (W[i]) cerr << '[';
+            else cerr << ' ';
+            cerr << setw(2) << setfill('0') << hex << (int)Mem[i];
+            if (R[Mem[i]] && W[i]) cerr << '}';
+            else if (R[i]) cerr << ')';
+            else if (W[i]) cerr << ']';
+            else cerr << ' ';
+            if ((i - begin) % 20 == 19) cerr << endl << setw(4) << setfill(' ') << hex << (uint16_t)(i + 1) << '\t';
+            R[i] = W[i] = false;
+        }
+        cerr << endl;
+    }*/
+    /*
+    void print_change() {
+        for (auto i : R) 
+            if (i.second)
+                print(i.first - 10, i.first + 10);
+        for (auto i : W) 
+            if (i.second)
+                print(i.first - 10, i.first + 10);
+    }*/
 };
 
 class InstructionDecoder {
@@ -140,7 +219,7 @@ private:
         R_type, I_type, S_type, B_type, U_type, J_type
     };
     InstructionFormat getFormat() {
-        uint opcode = getOpcode();
+        uint32_t opcode = getOpcode();
         switch (opcode) {
             case 0b0110111: case 0b0010111: 
                 return U_type;
@@ -150,21 +229,77 @@ private:
                 return I_type;
             case 0b1100011:
                 return B_type;
-            case 0b0000111:
+            case 0b0000011:
                 return I_type;
             case 0b0100011:
                 return S_type;
-            case 0b0010011:
-                uint funct3 = substr_of_inst(12, 3);
+            case 0b0010011: {
+                uint32_t funct3 = substr_of_inst(12, 3);
                 if (funct3 != 0b001 and funct3 != 0b101)
                     return I_type;
                 else 
                     return R_type;
+            }
             case 0b0110011:
                 return R_type;
         }
     }
 public:
+    void print() {
+        using namespace std;
+        cerr << "InstructionDecoder : " << endl;
+        cerr << hex << IR << ' ';
+        switch (getOperation()) {
+            case NOP: cerr << "NOP"; break;
+            case LUI: cerr << "LUI"; break;
+            case AUIPC: cerr << "AUIPC"; break;
+            case JAL: cerr << "JAL"; break;
+            case JALR: cerr << "JALR"; break;
+            case BEQ: cerr << "BEQ"; break;
+            case BNE: cerr << "BNE"; break;
+            case BLT: cerr << "BLT"; break;
+            case BGE: cerr << "BGE"; break;
+            case BLTU: cerr << "BLTU"; break;
+            case BGEU: cerr << "BGEU"; break;
+            case LB: cerr << "LB"; break;
+            case LH: cerr << "LH"; break;
+            case LW: cerr << "LW"; break;
+            case LBU: cerr << "LBU"; break;
+            case LHU: cerr << "LHU"; break;
+            case SB: cerr << "SB"; break;
+            case SH: cerr << "SH"; break;
+            case SW: cerr << "SW"; break;
+            case ADDI: cerr << "ADDI"; break;
+            case SLTI: cerr << "SLTI"; break;
+            case SLTIU: cerr << "SLTIU"; break;
+            case XORI: cerr << "XORI"; break;
+            case ORI: cerr << "ORI"; break;
+            case ANDI: cerr << "ANDI"; break;
+            case SLLI: cerr << "SLLI"; break;
+            case SRLI: cerr << "SRLI"; break;
+            case SRAI: cerr << "SRAI"; break;
+            case ADD: cerr << "ADD"; break;
+            case SUB: cerr << "SUB"; break;
+            case SLL: cerr << "SLL"; break;
+            case SLT: cerr << "SLT"; break;
+            case SLTU: cerr << "SLTU"; break;
+            case XOR: cerr << "XOR"; break;
+            case SRL: cerr << "SRL"; break;
+            case SRA: cerr << "SRA"; break;
+            case OR: cerr << "OR"; break;
+            case AND: cerr << "AND"; break;
+        }
+        if (checkRd()) 
+            switch (getRd()) {
+                case 0: cerr << "zero";
+                case 1: cerr << "zero";
+                case 2: cerr << "zero";
+                case 3: cerr << "zero";
+                case 4: cerr << "zero";
+                case 5: cerr << "zero";
+            }
+        cerr << endl;
+    }
     InstructionDecoder(const uint32_t IR) : IR(IR) {}
     InstructionOpcode getOpcode() { 
         return InstructionOpcode(substr_of_inst(0, 7)); 
@@ -198,17 +333,17 @@ public:
             case S_type: 
                 return (substr_of_inst(25, 7) << 5 | substr_of_inst(7, 5) | sign_extend(11));
             case B_type: 
-                return (substr_of_inst(31) << 12 | substr_of_inst(25, 6) << 5 | substr_of_inst(8, 4) << 1 | substr_of_inst(7) | sign_extend(12));
+                return (substr_of_inst(25, 6) << 5 | substr_of_inst(8, 4) << 1 | substr_of_inst(7) << 11 | sign_extend(12));
             case U_type:
                 return (substr_of_inst(12, 20) << 12 | sign_extend(31));
             case J_type:
-                return (substr_of_inst(31) << 20 | substr_of_inst(21, 10) << 1 | substr_of_inst(20) << 11 | substr_of_inst(12, 8) << 12 | sign_extend(20));
+                return (substr_of_inst(21, 10) << 1 | substr_of_inst(20) << 11 | substr_of_inst(12, 8) << 12 | sign_extend(20));
         }
     }
     InstructionOperation getOperation() {
-        uint opcode = getOpcode();
-        uint funct3 = getFunct3();
-        uint funct7 = getFunct7();
+        uint32_t opcode = getOpcode();
+        uint32_t funct3 = getFunct3();
+        uint32_t funct7 = getFunct7();
 
         switch (opcode) {
             default: return NOP;
@@ -289,16 +424,55 @@ public:
     }  
 };
 
+//#include <map>
+//#include <string>
+
 class Registers {
 private:
     uint32_t Regs[32];
+    //std::map<uint32_t, bool>R, W;
 public:
+    Registers() {
+        Regs[0] = 0;
+    }
     uint32_t read(uint32_t pointer) {
+        //R[pointer] = true;
         return Regs[pointer];
     }
     void write(uint32_t pointer, uint32_t value) {
+        if (!pointer) return;
+        //W[pointer] = true;
         Regs[pointer] = value;
     }
+    /*
+    void print() {
+        using namespace std;
+        string nm[] = {
+            "zero", "  ra", "  sp", "  gp", "  tp", "  t0", "  t1", "  t2",
+            "  s0", "  s1", 
+            "  a0", "  a1", "  a2", "  a3", "  a4", "  a5", "  a6", "  a7",
+            "  s2", "  s3", "  s4", "  s5", "  s6", "  s7", "  s8", "  s9",
+            " s10", " s11", "  t3", "  t4", "  t5", "  t6"
+        };
+        cerr << "Registers : " << endl;
+        for (int i = 0; i < 8; i++) {
+            cerr << "    ";
+            for (int j = 0; j < 4; j++) {
+                if (R[i * 4 + j] && W[i * 4 + j]) cerr << '{';
+                else if (R[i * 4 + j]) cerr << '(';
+                else if (W[i * 4 + j]) cerr << '[';
+                else cerr << ' ';
+                cerr << nm[i * 4 + j] << ':' << setw(8) << setfill('0') << hex << Regs[i * 4 + j];
+                if (R[i * 4 + j] && W[i * 4 + j]) cerr << '}';
+                else if (R[i * 4 + j]) cerr << ')';
+                else if (W[i * 4 + j]) cerr << ']';
+                else cerr << ' ';
+            }
+            cerr << endl;
+        }
+        R.clear(); W.clear();
+    }
+    */
 };
 
 class Forwarding {
@@ -319,6 +493,7 @@ public:
         max_rank = 0;
     }
     bool set_change_rd(uint32_t Rd, uint32_t Clk) {
+        if (!Rd) return false;
         for (int i = 0; i < FD_SIZE; i++)
             if (rd[i] == 0) {
                 rd[i] = -(int)Rd;
@@ -365,42 +540,73 @@ public:
                 if (rank[i] > rnk) 
                     rnk = rank[i], k = i;
             }
-            
-        
             if (rd[k] == pointer) 
                 return true;
             else
                 return false;
-        
-        
     }
     uint32_t get(const uint32_t &pointer) {
-        
+        uint32_t rnk = 0, k = 0;
+        for (int i = 0; i < FD_SIZE; i++)
+            if (pointer == rd[i] or pointer == -rd[i]) {
+                if (rank[i] > rnk) 
+                    rnk = rank[i], k = i;
+            }
+        return output[k];
     }
 };
 struct IF_ID { 
     uint32_t IR; 
     uint32_t NPC; 
+    uint32_t PPC;
     uint32_t PC; 
     uint32_t CLK;
     void clear() { IR = NOP; }
+    void print() {
+        using namespace std;
+        cerr << "IF_ID : " << endl;
+        cerr << "    " << "IR =\t" << setw(8) << setfill('0') << hex << IR << endl;
+        cerr << "    " << "NPC =\t" << setw(8) << setfill('0') << hex << NPC << endl;
+        cerr << "    " << "PPC =\t" << setw(8) << setfill('0') << hex << PPC << endl;
+        cerr << "    " << "PC =\t" << setw(8) << setfill('0') << hex << PC << endl;
+        cerr << "    " << "CLK =\t" << setw(8) << setfill('0') << hex << CLK << endl;
+    }
 };
 struct ID_EX { 
     uint32_t IR; 
     uint32_t NPC;
+    uint32_t PPC;
     uint32_t PC; 
     uint32_t A; 
     uint32_t B;
     uint32_t CLK;
     void clear() { IR = NOP; }
+    void print() {
+        using namespace std;
+        cerr << "ID_EX : " << endl;
+        cerr << "    " << "IR =\t" << setw(8) << setfill('0') << hex << IR << endl;
+        cerr << "    " << "NPC =\t" << setw(8) << setfill('0') << hex << NPC << endl;
+        cerr << "    " << "PPC =\t" << setw(8) << setfill('0') << hex << PPC << endl;
+        cerr << "    " << "PC =\t" << setw(8) << setfill('0') << hex<< PC << endl;
+        cerr << "    " << "CLK =\t" << setw(8) << setfill('0') << hex << CLK << endl;
+        cerr << "    " << "A = \t" << setw(8) << setfill('0') << hex << A << endl;
+        cerr << "    " << "B = \t" << setw(8) << setfill('0') << hex << B << endl;
+    }
 };
 struct EX_MEM { 
     uint32_t IR; 
     uint32_t ALUOutput; 
     uint32_t B; 
-    bool cond; 
     uint32_t CLK;
     void clear() { IR = NOP; }
+    void print() {
+        using namespace std;
+        cerr << "EX_MEM : " << endl;
+        cerr << "    " << "IR = \t" << setw(8) << setfill('0') << hex << IR << endl;
+        cerr << "    " << "CLK = \t" << setw(8) << setfill('0') << hex << CLK << endl;
+        cerr << "    " << "ALUOutput = \t" << setw(8) << setfill('0') << hex << ALUOutput << endl;
+        cerr << "    " << "B = \t" << setw(8) << setfill('0') << hex << B << endl;
+    }
 };
 struct MEM_WB { 
     uint32_t IR; 
@@ -408,13 +614,21 @@ struct MEM_WB {
     uint32_t LMD;
     uint32_t CLK; 
     void clear() { IR = NOP; }
+    void print() {
+        using namespace std;
+        cerr << "MEM_WB : " << endl;
+        cerr << "    " << "IR = \t" << setw(8) << setfill('0') << hex << IR << endl;
+        cerr << "    " << "CLK = \t" << setw(8) << setfill('0') << hex << CLK << endl;
+        cerr << "    " << "ALUOutput = \t" << setw(8) << setfill('0') << hex << ALUOutput << endl;
+        cerr << "    " << "LMD = \t" << setw(8) << setfill('0') << hex << LMD << endl;
+    }
 };
 
 class Hazard {
 private:
     bool exist;
 public:
-    Hazard() { exist = false; }
+    Hazard() : exist(false) {}
     void set(bool state) { exist = state; }
     bool get() { return exist; }
 };
@@ -425,20 +639,18 @@ private:
     uint64_t remain_clk_cyc;
     Hazard hazard;
 public:
-    StageUnit() {}
+    StageUnit() : remain_clk_cyc(0) {}
     void set_clk_cyc(uint64_t t) {
         remain_clk_cyc = t;
     } 
+    uint64_t get_clk_cyc() {
+        return remain_clk_cyc;
+    }
     void start() {
         set_clk_cyc(1);
     }
     void end() {
         set_clk_cyc(0);
-    }
-    void run() {
-        if (remain_clk_cyc == 1) end();
-        else if (remain_clk_cyc > 0)
-            remain_clk_cyc--;
     }
     bool is_finished() {
         return remain_clk_cyc == 0;
@@ -466,10 +678,16 @@ private:
     AdderUnit AU;
     uint32_t clk;
 public:
-    IFU(uint32_t &pc, IF_ID &if_id, RandomAccessMemory &RAM, BranchPredictor &BP) : pc(pc), if_id(if_id), RAM(RAM), BP(BP) {}
+    IFU(uint32_t &pc, IF_ID &if_id, RandomAccessMemory &RAM, BranchPredictor &BP) : 
+    StageUnit(), pc(pc), if_id(if_id), RAM(RAM), BP(BP) {}
     void start(uint32_t clk) {
         StageUnit::start();
         this->clk = clk;
+    }
+    void run() {
+        if (get_clk_cyc() == 1) end();
+        else if (get_clk_cyc() > 0)
+            set_clk_cyc(get_clk_cyc() - 1);
     }
     void end() {
         StageUnit::end();
@@ -481,7 +699,6 @@ public:
             RAM.read(pc + 3) << 24;
        
         InstructionDecoder IR(if_id.IR);
-
         AU.setInput1(pc);
         switch (IR.getOpcode()) {
             case OC_JAL:    AU.setInput2(IR.getImm());
@@ -496,7 +713,7 @@ public:
                 break;
         }
         pc = AU.getOutput();
-        if_id.NPC = pc;
+        if_id.PPC = if_id.NPC = pc;
         if_id.CLK = clk;
     }
     void restart() {
@@ -518,9 +735,14 @@ private:
     AdderUnit AU;
 public:
     IDU(uint32_t &pc, IF_ID &if_id, ID_EX &id_ex, Registers &Regs, BranchPredictor &BP, Forwarding &FD) : 
-    pc(pc), if_id(if_id), id_ex(id_ex), Regs(Regs), BP(BP), FD(FD) {}
+    StageUnit(), pc(pc), if_id(if_id), id_ex(id_ex), Regs(Regs), BP(BP), FD(FD) {}
     void start() {
         StageUnit::start();
+    }
+    void run() {
+        if (get_clk_cyc() == 1) end();
+        else if (get_clk_cyc() > 0)
+            set_clk_cyc(get_clk_cyc() - 1);
     }
     void end() {
         StageUnit::end();
@@ -532,8 +754,10 @@ public:
             if (FD.check_changed(IR.getRs1())) {
                 if (FD.check_output(IR.getRs1()))
                     id_ex.A = FD.get(IR.getRs1());
-                else
+                else {
                     this->throw_hazard();
+                    return;
+                }
             }
             else 
                 id_ex.A = Regs.read(IR.getRs1());
@@ -542,9 +766,11 @@ public:
         if (IR.checkRs2()) {
             if (FD.check_changed(IR.getRs2())) {
                 if (FD.check_output(IR.getRs2()))
-                    id_ex.A = FD.get(IR.getRs2());
-                else
+                    id_ex.B = FD.get(IR.getRs2());
+                else {
                     this->throw_hazard();
+                    return;
+                }
             }
             else 
                 id_ex.B = Regs.read(IR.getRs2());
@@ -554,11 +780,14 @@ public:
             id_ex.B = IR.getImm();
 
         if (IR.getOpcode() == OC_JALR) {
-            AU.setInput1(if_id.PC);
+            AU.setInput1(id_ex.A);
             AU.setInput2(IR.getImm());
             pc = AU.getOutput() & ~1u;
         }
         id_ex.CLK = if_id.CLK;
+        id_ex.PC = if_id.PC;
+        id_ex.NPC = if_id.NPC;
+        id_ex.PPC = if_id.PPC;
         if_id.clear();
     }
     void restart() {
@@ -582,15 +811,20 @@ public:
         EX_MEM &ex_mem, 
         BranchPredictor &BP, 
         Forwarding &FD
-    ) : pc(pc), id_ex(id_ex), ex_mem(ex_mem), BP(BP), FD(FD) {}
+    ) : StageUnit(), pc(pc), id_ex(id_ex), ex_mem(ex_mem), BP(BP), FD(FD) {}
     void start() {
         StageUnit::start();
+    }
+    void run() {
+        if (get_clk_cyc() == 1) end();
+        else if (get_clk_cyc() > 0)
+            set_clk_cyc(get_clk_cyc() - 1);
     }
     void end() {
         StageUnit::end();
         ex_mem.IR = id_ex.IR;
         if (id_ex.IR == NOP) return;
-        
+        ex_mem.CLK = id_ex.CLK;
         InstructionDecoder IR(id_ex.IR);
         
         if (IR.checkRd())
@@ -598,17 +832,29 @@ public:
 
         switch (IR.getOpcode())
         {
-        case OC_OP_IMM: case OC_OP: 
+        case OC_OP_IMM: 
+            ALU.setInput1(id_ex.A);
+            ALU.setInput2(id_ex.B);
+            ALU.setOpType(IR.getFunct3(), IR.getFunct7());
+            ALU.setImm();
+            ex_mem.ALUOutput = ALU.getOutput(); 
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
+            break;
+        case OC_OP: 
             ALU.setInput1(id_ex.A);
             ALU.setInput2(id_ex.B);
             ALU.setOpType(IR.getFunct3(), IR.getFunct7());
             ex_mem.ALUOutput = ALU.getOutput(); 
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
             break;
         case OC_LUI: 
             ALU.setInput1(id_ex.B);
-            ALU.setInput2(12);
+            // TODO
+            //ALU.setInput2(12);
+            ALU.setInput2(0);
             ALU.setOpType(ArithmeticLogicUnit::OT_SRL);
             ex_mem.ALUOutput = ALU.getOutput(); 
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
             break;
         case OC_AUIPC: 
             ALU.setInput1(id_ex.B);
@@ -618,27 +864,23 @@ public:
             ALU.setInput2(id_ex.PC);
             ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
             ex_mem.ALUOutput = ALU.getOutput();
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
             break;
         case OC_JAL: case OC_JALR:
             ALU.setInput1(id_ex.PC);
             ALU.setInput2(4);
             ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
             ex_mem.ALUOutput = ALU.getOutput();
+            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
             break;
-        case OC_BRANCH:
+        case OC_BRANCH: {
             bool token;
             uint32_t operation = IR.getOperation();
             switch (operation) {
-                case BEQ: case BNE:
-                    ALU.setOpType(ArithmeticLogicUnit::OT_SLTU);
+                case BEQ: case BNE: 
+                    ALU.setOpType(ArithmeticLogicUnit::OT_EQ);
                     ALU.setInput1(id_ex.A);
                     ALU.setInput2(id_ex.B);
-                    uint32_t tmp = ALU.getOutput();
-                    ALU.setInput1(id_ex.B);
-                    ALU.setInput2(id_ex.A);
-                    ALU.setInput1(ALU.getOutput());
-                    ALU.setInput2(tmp);
-                    ALU.setOpType(ArithmeticLogicUnit::OT_AND);
                     token = ALU.getOutput();
                     break; 
                 case BLT: case BGE:
@@ -654,28 +896,42 @@ public:
                     token = ALU.getOutput();
                     break;
             }
-            switch (operation) {
-                case BNE: case BGE: case BGEU: token = not token;
-            }
+            if (operation == BNE or operation == BGE or operation == BGEU) 
+                token = not token;
             BP.set(token);
             if (token) {
                 ALU.setInput1(id_ex.PC);
-                ALU.setInput2(id_ex.B);
-                pc = ALU.getOutput();
+                ALU.setInput2(IR.getImm());
+                ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
+                id_ex.NPC = ALU.getOutput();
+            } else {
+                ALU.setInput1(id_ex.PC);
+                ALU.setInput2(4);
+                ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
+                id_ex.NPC = ALU.getOutput();
             }
-            if (pc != id_ex.NPC) 
+            if (id_ex.PPC != id_ex.NPC) {
+                pc = id_ex.NPC;
                 this->throw_hazard();
+                //return;
+            }
+        }
             break;
-        case OC_LOAD: case OC_STORE:
+        case OC_LOAD: 
             ALU.setInput1(id_ex.A);
             ALU.setInput2(id_ex.B);
             ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
             ex_mem.ALUOutput = ALU.getOutput();
             break;
+        case OC_STORE:
+            ALU.setInput1(id_ex.A);
+            ALU.setInput2(IR.getImm());
+            ALU.setOpType(ArithmeticLogicUnit::OT_ADD);
+            ex_mem.ALUOutput = ALU.getOutput();
+            ex_mem.B = id_ex.B;
+            break;
         }
-        if (IR.checkRd())
-            FD.set_change_output(ex_mem.ALUOutput, id_ex.CLK);
-        ex_mem.CLK = id_ex.CLK;
+        
         id_ex.clear();
     }
     void restart() {
@@ -696,7 +952,7 @@ public:
         MEM_WB &mem_wb, 
         RandomAccessMemory &RAM, 
         Forwarding &FD
-    ) : ex_mem(ex_mem), mem_wb(mem_wb), RAM(RAM), FD(FD) {}
+    ) : StageUnit(), ex_mem(ex_mem), mem_wb(mem_wb), RAM(RAM), FD(FD) {}
     void start() {
         StageUnit::start();
         switch (InstructionDecoder(ex_mem.IR).getOpcode())
@@ -706,11 +962,17 @@ public:
             break;
         }
     }
+    void run() {
+        if (get_clk_cyc() == 1) end();
+        else if (get_clk_cyc() > 0)
+            set_clk_cyc(get_clk_cyc() - 1);
+    }
     void end() {
         StageUnit::end();
         mem_wb.IR = ex_mem.IR;
         if (ex_mem.IR == NOP) return;
-        
+        mem_wb.CLK = ex_mem.CLK;
+
         InstructionDecoder IR(ex_mem.IR);
         switch (IR.getOpcode())
         {
@@ -768,9 +1030,14 @@ public:
         MEM_WB &mem_wb, 
         Registers &Regs,
         Forwarding &FD
-    ) : mem_wb(mem_wb), Regs(Regs), FD(FD) {}
+    ) : StageUnit(), mem_wb(mem_wb), Regs(Regs), FD(FD) {}
     void start() {
         StageUnit::start();
+    }
+    void run() {
+        if (get_clk_cyc() == 1) end();
+        else if (get_clk_cyc() > 0)
+            set_clk_cyc(get_clk_cyc() - 1);
     }
     void end() {
         StageUnit::end();
@@ -778,11 +1045,11 @@ public:
         InstructionDecoder IR(mem_wb.IR);
         switch (IR.getOpcode())
         {
-        case OC_OP: case OC_OP_IMM: case OC_LUI: case OC_AUIPC: 
+        case OC_JAL: case OC_JALR: case OC_OP: case OC_OP_IMM: case OC_LUI: case OC_AUIPC: 
             Regs.write(IR.getRd(), mem_wb.ALUOutput);
             FD.set_complete(mem_wb.CLK);
             break;
-        case OC_JAL: case OC_JALR: case OC_BRANCH:
+        case OC_BRANCH:
             break;
         case OC_LOAD:
             Regs.write(IR.getRd(), mem_wb.LMD);
@@ -800,6 +1067,7 @@ public:
 
 class CPU {
 private:
+    //RandomAccessMemory &IM, &DM;
     RandomAccessMemory &RAM;
     Registers RegisterFile;
     IF_ID if_id;
@@ -808,6 +1076,8 @@ private:
     MEM_WB mem_wb;
     BranchPredictor BP;
     Forwarding FD;
+    uint32_t pc = 0;
+    uint64_t clk = 0;
     int to_hex(char c) {
         if (c >= '0' && c <= '9')
             return c - '0';
@@ -818,33 +1088,104 @@ private:
         return EOF;
     }
 public:
+    //CPU(RandomAccessMemory &IM, RandomAccessMemory &DM) : IM(IM), DM(DM) {}
     CPU(RandomAccessMemory &RAM) : RAM(RAM) {}
     void load_program() {
         char c = getchar();
-        uint now_ptr = 0;
+        uint32_t now_ptr = 0;
         while (true) {
             if (c == EOF) {
                 break;
-            }
-            else if (c == '@') {
+            } else if (!isgraph(c)) {
+                c = getchar();
+                continue;
+            } else if (c == '@') {
                 now_ptr = 0;
                 c = getchar();
-                while (c == '0' || c == '1')
-                    now_ptr = now_ptr << 1 | (c - '0'), c = getchar();
-            } else {
-                RAM.write(now_ptr, to_hex(c) << 4 | to_hex(getchar()));
+                for (int k = 0; k < 8; k++)
+                    now_ptr = now_ptr << 4 | to_hex(c), c = getchar();
                 c = getchar();
-            }
-            c = getchar();
+            } else {
+                //IM.write(now_ptr, to_hex(c) << 4 | to_hex(getchar()));
+                RAM.write(now_ptr, to_hex(c) << 4 | to_hex(getchar()));
+                now_ptr++;
+                c = getchar();
+                c = getchar();
+            } 
+            //if (now_ptr < 200)
+            //    RAM.print(0, 200);
         }
+        //RAM.print(0, 5000);
     }
     void pipline_flush() {
         if_id.clear();
         id_ex.clear();
     }
+    /*
+    void print() {
+        using namespace std;
+        cerr << "=============================" << endl;
+        cerr << "PC : \t" << setw(8) << setfill('0') << hex << pc << endl;
+        cerr << "CLK : \t" << setw(8) << setfill('0') << hex << clk << endl;
+        if_id.print();
+        id_ex.print();
+        ex_mem.print();
+        mem_wb.print();
+        RegisterFile.print();
+        //RAM.print(1 << 17, 200);
+        RAM.print_change();
+    }
+    */
+    void stage(IFU &IF, IDU& ID, EXU &EX, MEMU& MEM, WBU& WB, bool &rst) {
+            clk++;
+            //if (clk > 100) break;
+            //print();
+            WB.run();            
+            if (!WB.is_finished()) return;
+            else if (WB.catch_hazard()) {
+                WB.solve_hazard(); 
+                //WB.restart();
+                return;
+            } else WB.start();
+
+            MEM.run();            
+            if (!MEM.is_finished()) return;
+            else if (MEM.catch_hazard()) {
+                MEM.solve_hazard(); 
+                //MEM.restart();
+                return;
+            } else MEM.start();
+
+            EX.run();            
+            if (!EX.is_finished()) return;
+            else if (EX.catch_hazard()) {
+                EX.solve_hazard(); 
+                //EX.restart();
+                pipline_flush();
+                return;
+            } else EX.start();
+
+            ID.run(); 
+            if (id_ex.IR == 0x0ff00613) rst = true;
+            if (rst) id_ex.IR = NOP;
+            if (!ID.is_finished()) return;
+            else if (ID.catch_hazard()) {
+                ID.solve_hazard(); 
+                ID.restart();
+                return;
+            } else ID.start();
+
+            IF.run();    
+            if (!IF.is_finished()) return;
+            else if (IF.catch_hazard()) {
+                IF.solve_hazard(); 
+                //IF.restart();
+                return;
+            } else IF.start(clk);
+    }
     void run_with_pipeline() {
-        uint32_t pc = 0;
-        uint32_t clk = 0;
+        
+        
         bool rst = false;
         if_id.clear();
         id_ex.clear();
@@ -856,58 +1197,21 @@ public:
         MEMU MEM(ex_mem, mem_wb,    RAM,                FD  );
         WBU WB(mem_wb,              RegisterFile,       FD  );
         while (!rst or mem_wb.IR != NOP) {
-            clk++;
-            WB.run();            
-            if (!WB.is_finished()) continue;
-            else if (WB.catch_hazard()) {
-                WB.solve_hazard(); 
-                //WB.restart();
-                continue;
-            } else WB.start();
-
-            MEM.run();            
-            if (!MEM.is_finished()) continue;
-            else if (MEM.catch_hazard()) {
-                MEM.solve_hazard(); 
-                //MEM.restart();
-                continue;
-            } else MEM.start();
-
-            EX.run();            
-            if (!EX.is_finished()) continue;
-            else if (EX.catch_hazard()) {
-                EX.solve_hazard(); 
-                //EX.restart();
-                pipline_flush();
-                continue;
-            } else EX.start();
-
-            ID.run(); 
-            if (id_ex.IR == 0x0ff00513) rst = true;
-            if (!ID.is_finished()) continue;
-            else if (ID.catch_hazard()) {
-                ID.solve_hazard(); 
-                ID.restart();
-                continue;
-            } else ID.start();
-
-            IF.run();    
-            if (rst) if_id.IR = NOP;
-            if (!IF.is_finished()) continue;
-            else if (IF.catch_hazard()) {
-                IF.solve_hazard(); 
-                //IF.restart();
-                continue;
-            } else IF.start(clk);
+            stage(IF, ID, EX, MEM, WB, rst);
         }
+        //print();
+        printf("%d\n", int(RegisterFile.read(10) & 255u));
     }
 };
 
 }
 
 int main() {
-    sjtu::RandomAccessMemory Mem;
-    sjtu::CPU cpu(Mem);
+    //freopen("riscv-data/bulgarian.data", "r", stdin);
+    //sjtu::RandomAccessMemory IM, DM;
+    //sjtu::CPU cpu(IM, DM);
+    sjtu::RandomAccessMemory RAM;
+    sjtu::CPU cpu(RAM);
     cpu.load_program();
     cpu.run_with_pipeline();
 }
