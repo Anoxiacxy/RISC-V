@@ -1,1 +1,0 @@
-/usr/bin/c++  -O2  -rdynamic CMakeFiles/code.dir/release.cpp.o  -o code 

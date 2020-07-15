@@ -1,3 +1,0 @@
-/mnt/c/Users/Anoxiacxy/Documents/02_Study/04_大一下假期/01_RISC-V/CMakeFiles/rebuild_cache.dir
-/mnt/c/Users/Anoxiacxy/Documents/02_Study/04_大一下假期/01_RISC-V/CMakeFiles/code.dir
-/mnt/c/Users/Anoxiacxy/Documents/02_Study/04_大一下假期/01_RISC-V/CMakeFiles/edit_cache.dir
