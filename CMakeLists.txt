@@ -12,4 +12,4 @@ project (RISC-V)
 
 # 指定生成目标
 
-add_executable(code debug.cpp)
+add_executable(code release.cpp)

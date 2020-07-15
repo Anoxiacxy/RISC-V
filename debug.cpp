@@ -8,7 +8,7 @@ enum InstructionOperation {
     NOP, LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
 };
 enum InstructionOpcode {
-    OC_NOP  = 0b0000000,
+    OC_NOP     = 0b0000000,
     OC_LUI     = 0b0110111,
     OC_AUIPC   = 0b0010111,
     OC_JAL     = 0b1101111,
@@ -204,7 +204,7 @@ class InstructionDecoder {
 private:
     uint32_t IR;
     uint32_t substr_of_inst(uint32_t low, uint32_t len) {
-        return IR >> low & ((1u << len) - 1u);
+        return IR >> low & len;
     }
     uint32_t substr_of_inst(uint32_t pos) {
         return IR >> pos & 1u;
@@ -234,7 +234,7 @@ private:
             case 0b0100011:
                 return S_type;
             case 0b0010011: {
-                uint32_t funct3 = substr_of_inst(12, 3);
+                uint32_t funct3 = substr_of_inst(12, 0b111);
                 if (funct3 != 0b001 and funct3 != 0b101)
                     return I_type;
                 else 
@@ -302,7 +302,7 @@ public:
     }
     InstructionDecoder(const uint32_t IR) : IR(IR) {}
     InstructionOpcode getOpcode() { 
-        return InstructionOpcode(substr_of_inst(0, 7)); 
+        return InstructionOpcode(substr_of_inst(0, 0b1111111)); 
     }
     bool checkRd() {
         InstructionOpcode opcode = getOpcode();
@@ -319,25 +319,25 @@ public:
     bool checkShamt() {
         return getOpcode() == OC_OP_IMM and (getFunct3() == 0b001 or getFunct3() == 0b101);
     }
-    uint32_t getRd()        { return substr_of_inst(7, 5); }
-    uint32_t getFunct3()    { return substr_of_inst(12, 3); }
-    uint32_t getRs1()       { return substr_of_inst(15, 5); }
-    uint32_t getRs2()       { return substr_of_inst(20, 5); }
-    uint32_t getShamt()     { return substr_of_inst(20, 5); }
-    uint32_t getFunct7()    { return substr_of_inst(25, 7); }
+    uint32_t getRd()        { return substr_of_inst(7, 0b11111); }
+    uint32_t getFunct3()    { return substr_of_inst(12, 0b111); }
+    uint32_t getRs1()       { return substr_of_inst(15, 0b11111); }
+    uint32_t getRs2()       { return substr_of_inst(20, 0b11111); }
+    uint32_t getShamt()     { return substr_of_inst(20, 0b11111); }
+    uint32_t getFunct7()    { return substr_of_inst(25, 0b1111111); }
     uint32_t getImm() {
         switch (getFormat()) {
             case R_type: return 0u;
             case I_type: 
-                return (substr_of_inst(20, 12) | sign_extend(11)); 
+                return (substr_of_inst(20, 0b111111111111) | sign_extend(11)); 
             case S_type: 
-                return (substr_of_inst(25, 7) << 5 | substr_of_inst(7, 5) | sign_extend(11));
+                return (substr_of_inst(25, 0b1111111) << 5 | substr_of_inst(7, 0b11111) | sign_extend(11));
             case B_type: 
-                return (substr_of_inst(25, 6) << 5 | substr_of_inst(8, 4) << 1 | substr_of_inst(7) << 11 | sign_extend(12));
+                return (substr_of_inst(25, 0b111111) << 5 | substr_of_inst(8, 0b1111) << 1 | substr_of_inst(7) << 11 | sign_extend(12));
             case U_type:
-                return (substr_of_inst(12, 20) << 12 | sign_extend(31));
+                return (substr_of_inst(12, 0b11111111111111111111) << 12 | sign_extend(31));
             case J_type:
-                return (substr_of_inst(21, 10) << 1 | substr_of_inst(20) << 11 | substr_of_inst(12, 8) << 12 | sign_extend(20));
+                return (substr_of_inst(21, 0b1111111111) << 1 | substr_of_inst(20) << 11 | substr_of_inst(12, 0b11111111) << 12 | sign_extend(20));
         }
     }
     InstructionOperation getOperation() {
@@ -636,33 +636,33 @@ public:
 
 class StageUnit {
 private:
-    uint64_t remain_clk_cyc;
-    Hazard hazard;
+    uint32_t remain_clk_cyc;
+    bool hazard;
 public:
-    StageUnit() : remain_clk_cyc(0) {}
-    void set_clk_cyc(uint64_t t) {
+    StageUnit() : remain_clk_cyc(0), hazard(false) {}
+    void set_clk_cyc(uint32_t t) {
         remain_clk_cyc = t;
     } 
-    uint64_t get_clk_cyc() {
+    uint32_t &get_clk_cyc() {
         return remain_clk_cyc;
     }
     void start() {
-        set_clk_cyc(1);
+        remain_clk_cyc = 1;
     }
     void end() {
-        set_clk_cyc(0);
+        remain_clk_cyc = 0;
     }
     bool is_finished() {
         return remain_clk_cyc == 0;
     }
     void throw_hazard() {
-        hazard.set(true);
+        hazard = true;
     }
     bool catch_hazard() {
-        return hazard.get();
+        return hazard;
     }
     void solve_hazard() {
-        hazard.set(false);
+        hazard = false;
     }
     void restart() {
         start();   
@@ -685,9 +685,7 @@ public:
         this->clk = clk;
     }
     void run() {
-        if (get_clk_cyc() == 1) end();
-        else if (get_clk_cyc() > 0)
-            set_clk_cyc(get_clk_cyc() - 1);
+        end();
     }
     void end() {
         StageUnit::end();
@@ -740,9 +738,7 @@ public:
         StageUnit::start();
     }
     void run() {
-        if (get_clk_cyc() == 1) end();
-        else if (get_clk_cyc() > 0)
-            set_clk_cyc(get_clk_cyc() - 1);
+        end();
     }
     void end() {
         StageUnit::end();
@@ -1077,7 +1073,7 @@ private:
     BranchPredictor BP;
     Forwarding FD;
     uint32_t pc = 0;
-    uint64_t clk = 0;
+    uint32_t clk = 0;
     int to_hex(char c) {
         if (c >= '0' && c <= '9')
             return c - '0';
@@ -1196,9 +1192,8 @@ public:
         EXU EX(pc, id_ex, ex_mem,                   BP, FD  );
         MEMU MEM(ex_mem, mem_wb,    RAM,                FD  );
         WBU WB(mem_wb,              RegisterFile,       FD  );
-        while (!rst or mem_wb.IR != NOP) {
+        while (!rst or mem_wb.IR != NOP) 
             stage(IF, ID, EX, MEM, WB, rst);
-        }
         //print();
         printf("%d\n", int(RegisterFile.read(10) & 255u));
     }
@@ -1207,7 +1202,7 @@ public:
 }
 
 int main() {
-    //freopen("riscv-data/bulgarian.data", "r", stdin);
+    //freopen("testcases/bulgarian.data", "r", stdin);
     //sjtu::RandomAccessMemory IM, DM;
     //sjtu::CPU cpu(IM, DM);
     sjtu::RandomAccessMemory RAM;
