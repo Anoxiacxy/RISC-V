@@ -23,25 +23,17 @@ enum InstructionOpcode {
 class TwoBitSaturatingCounter {
 private:
     int8_t curState;
-    int64_t total;
-    int64_t success;
 public:
     TwoBitSaturatingCounter() {
-        curState = 2;
-        total = 0;
-        success = 0;
+        curState = 0;
     }
     bool get() {
-        total++; success++;
-        return curState >> 1 ?  true : false;
+        return curState >> 1 & 1 ?  true : false;
     }
     void set(bool PredictResult) {
         PredictResult ? ++curState : --curState;
         if (curState < 0) curState = 0;
         if (curState > 3) curState = 3;
-    }
-    void fail() {
-        success--;
     }
     void print() {
         if (curState & 3 == 3)
@@ -52,12 +44,6 @@ public:
             std::cerr << "TwoBitSaturatingCounter" << " : " << "weaklyNotToken" << std::endl;
         if (curState & 3 == 0)
             std::cerr << "TwoBitSaturatingCounter" << " : " << "stronglyNotToken" << std::endl;
-    }
-    double getRate() {
-        if (total != 0)
-            return 1.0 * success / total;
-        else 
-            return 0;
     }
 };
 
@@ -202,9 +188,8 @@ public:
             R[i] = W[i] = false;
         }
         cerr << endl;
-    }
-    */
-   /*
+    }*/
+    /*
     void print_change() {
         for (auto i : R) 
             if (i.second)
@@ -212,8 +197,7 @@ public:
         for (auto i : W) 
             if (i.second)
                 print(i.first - 10, i.first + 10);
-    }
-    */
+    }*/
 };
 
 class InstructionDecoder {
@@ -489,7 +473,6 @@ public:
         R.clear(); W.clear();
     }
     */
-    
 };
 
 class Forwarding {
@@ -929,7 +912,6 @@ public:
             }
             if (id_ex.PPC != id_ex.NPC) {
                 pc = id_ex.NPC;
-                BP.fail();
                 this->throw_hazard();
                 //return;
             }
@@ -1139,29 +1121,21 @@ public:
         if_id.clear();
         id_ex.clear();
     }
-    
+    /*
     void print() {
         using namespace std;
-        //cerr << "=============================" << endl;
-        if (id_ex.IR == 0xbf5ff0ef) {
-            //if (id_ex.PC == 0x1044 && RegisterFile.read(11) == 0) {
-                fprintf(stderr, "f(%x, %x, %x)\n", 
-                    RegisterFile.read(10),
-                    RegisterFile.read(11),
-                    RegisterFile.read(12));
-            //} 
-        }
-        //cerr << "PC : \t" << setw(8) << setfill('0') << hex << pc << endl;
-        //cerr << "CLK : \t" << setw(8) << setfill('0') << hex << clk << endl;
-        //if_id.print();
-        //id_ex.print();
-        //ex_mem.print();
-        //mem_wb.print();
-        //RegisterFile.print();
+        cerr << "=============================" << endl;
+        cerr << "PC : \t" << setw(8) << setfill('0') << hex << pc << endl;
+        cerr << "CLK : \t" << setw(8) << setfill('0') << hex << clk << endl;
+        if_id.print();
+        id_ex.print();
+        ex_mem.print();
+        mem_wb.print();
+        RegisterFile.print();
         //RAM.print(1 << 17, 200);
-        //RAM.print_change();
+        RAM.print_change();
     }
-    
+    */
     void stage(IFU &IF, IDU& ID, EXU &EX, MEMU& MEM, WBU& WB, bool &rst) {
             clk++;
             //if (clk > 100) break;
@@ -1175,7 +1149,6 @@ public:
             } else WB.start();
 
             MEM.run();            
-            if (mem_wb.IR == 0x0ff00513) rst = true;
             if (!MEM.is_finished()) return;
             else if (MEM.catch_hazard()) {
                 MEM.solve_hazard(); 
@@ -1183,7 +1156,6 @@ public:
                 return;
             } else MEM.start();
 
-            
             EX.run();            
             if (!EX.is_finished()) return;
             else if (EX.catch_hazard()) {
@@ -1194,8 +1166,8 @@ public:
             } else EX.start();
 
             ID.run(); 
-            
-            //if (rst) id_ex.IR = NOP;
+            if (id_ex.IR == 0x0ff00513) rst = true;
+            if (rst) id_ex.IR = NOP;
             if (!ID.is_finished()) return;
             else if (ID.catch_hazard()) {
                 ID.solve_hazard(); 
@@ -1224,13 +1196,11 @@ public:
         EXU EX(pc, id_ex, ex_mem,                   BP, FD  );
         MEMU MEM(ex_mem, mem_wb,    RAM,                FD  );
         WBU WB(mem_wb,              RegisterFile,       FD  );
-        //while (!rst or mem_wb.IR != NOP) {
-        while (!rst) {
+        while (!rst or mem_wb.IR != NOP) {
             stage(IF, ID, EX, MEM, WB, rst);
         }
         //print();
         printf("%d\n", int(RegisterFile.read(10) & 255u));
-        printf("%lf\n", BP.getRate());
     }
 };
 
